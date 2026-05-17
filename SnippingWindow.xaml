@@ -1,0 +1,71 @@
+<Window x:Class="SnapTranslate.SnippingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Cursor="Cross"
+        ResizeMode="NoResize"
+        KeyDown="Window_KeyDown">
+    <Grid>
+        <!-- Background screenshot -->
+        <Image x:Name="BackgroundImage" Stretch="Fill" IsHitTestVisible="False"/>
+        
+        <Canvas x:Name="OverlayCanvas"
+            Background="Transparent"
+            MouseDown="Canvas_MouseDown"
+            MouseMove="Canvas_MouseMove"
+            MouseUp="Canvas_MouseUp"
+            MouseLeave="Canvas_MouseLeave">
+        
+        <!-- Mask overlay that darkens the whole screen except the selection region -->
+        <Path x:Name="MaskPath" Fill="#90000000" IsHitTestVisible="False">
+            <Path.Data>
+                <CombinedGeometry GeometryCombineMode="Exclude">
+                    <CombinedGeometry.Geometry1>
+                        <RectangleGeometry x:Name="FullMaskGeometry"/>
+                    </CombinedGeometry.Geometry1>
+                    <CombinedGeometry.Geometry2>
+                        <RectangleGeometry x:Name="SelectionGeometry" RadiusX="15" RadiusY="15"/>
+                    </CombinedGeometry.Geometry2>
+                </CombinedGeometry>
+            </Path.Data>
+        </Path>
+
+        <Rectangle x:Name="SelectionRect"
+                   Stroke="{StaticResource MainGradientBrush}"
+                   StrokeThickness="2.5"
+                   RadiusX="15"
+                   RadiusY="15"
+                   Visibility="Hidden"
+                   Fill="#12ef629f">
+            <Rectangle.Effect>
+                <DropShadowEffect BlurRadius="45" ShadowDepth="0" Color="#ef629f" Opacity="0.9"/>
+            </Rectangle.Effect>
+        </Rectangle>
+
+        <!-- Custom Google Lens teardrop cursor next to the mouse -->
+        <Grid x:Name="CustomCursor" Width="38" Height="38" Visibility="Collapsed" IsHitTestVisible="False">
+            <Border Background="{StaticResource MainGradientBrush}" CornerRadius="0,19,19,19">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="8" ShadowDepth="2" Direction="270" Color="Black" Opacity="0.4"/>
+                </Border.Effect>
+                <Grid Width="26" Height="26" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <!-- Top and top corners bracket with camera bump -->
+                    <Path Stroke="White" StrokeThickness="2.2" StrokeLineJoin="Round" StrokeEndLineCap="Round" StrokeStartLineCap="Round"
+                          Data="M 6,12.5 V 10 C 6,8.3 7.7,7 9.5,7 H 11 L 11.8,5.2 H 14.2 L 15,7 H 16.5 C 18.3,7 20,8.3 20,10 V 12.5" />
+                    <!-- Bottom-left bracket -->
+                    <Path Stroke="White" StrokeThickness="2.2" StrokeLineJoin="Round" StrokeEndLineCap="Round" StrokeStartLineCap="Round"
+                          Data="M 6,14.5 V 17 C 6,18.7 7.7,20 9.5,20 H 12.5" />
+                    <!-- Center lens dot -->
+                    <Ellipse Width="5" Height="5" Fill="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <!-- Bottom-right dot (flash indicator) -->
+                    <Ellipse Width="3.8" Height="3.8" Fill="White" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,5.5,5.5"/>
+                </Grid>
+            </Border>
+        </Grid>
+    </Canvas>
+    </Grid>
+</Window>

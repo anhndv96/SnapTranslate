@@ -1,0 +1,34 @@
+## Ignore Visual Studio temp files, build results, and user settings
+
+# Build folders
+[Bb]in/
+[Oo]bj/
+[Tt]est[Rr]esults/
+
+# Visual Studio files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+
+# Mono/VS Code
+.vscode/
+.idea/
+
+# NuGet Packages
+packages/
+*.nuget.props
+*.nuget.targets
+
+# OS generated files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+.DS_Store
+
+# Temp files
+*.tmp
+*.log

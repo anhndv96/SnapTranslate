@@ -1,0 +1,31 @@
+
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.11.35208.52
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "SnapTranslate", "SnapTranslate.csproj", "{BEDE8D6E-E505-409C-A27F-9F03E7ED9E44}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnapTranslate.Tests", "SnapTranslate.Tests\SnapTranslate.Tests.csproj", "{CACE6522-EFCC-4E83-99E0-E5DD35D9BB7C}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{BEDE8D6E-E505-409C-A27F-9F03E7ED9E44}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{BEDE8D6E-E505-409C-A27F-9F03E7ED9E44}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{BEDE8D6E-E505-409C-A27F-9F03E7ED9E44}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{BEDE8D6E-E505-409C-A27F-9F03E7ED9E44}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CACE6522-EFCC-4E83-99E0-E5DD35D9BB7C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CACE6522-EFCC-4E83-99E0-E5DD35D9BB7C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CACE6522-EFCC-4E83-99E0-E5DD35D9BB7C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CACE6522-EFCC-4E83-99E0-E5DD35D9BB7C}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {030462DF-E4FC-44CB-B5BD-2A9BABA3F1A4}
+	EndGlobalSection
+EndGlobal

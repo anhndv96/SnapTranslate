@@ -1,0 +1,409 @@
+<Window x:Class="SnapTranslate.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:local="clr-namespace:SnapTranslate"
+        mc:Ignorable="d"
+        Title="SnapTranslate" 
+        WindowStyle="None"
+        AllowsTransparency="True"
+        Background="Transparent"
+        ShowInTaskbar="True"
+        Icon="icon.ico"
+        Topmost="False"
+        ResizeMode="NoResize"
+        Width="600"
+        MinWidth="600"
+        WindowStartupLocation="CenterScreen"
+        MinHeight="400"
+        SizeToContent="Height">
+    <Window.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="Resources/Styles.xaml"/>
+            </ResourceDictionary.MergedDictionaries>
+
+            <BooleanToVisibilityConverter x:Key="BoolToVis"/>
+
+            <!-- Spin / Pulse animation for Logo -->
+            <Storyboard x:Key="LogoLoadingStoryboard" RepeatBehavior="Forever">
+                <DoubleAnimation Storyboard.TargetName="LogoTransform"
+                                 Storyboard.TargetProperty="Angle"
+                                 From="0" To="360" Duration="0:0:1.5"/>
+                <DoubleAnimation Storyboard.TargetName="LogoViewbox"
+                                 Storyboard.TargetProperty="Opacity"
+                                 From="1.0" To="0.4" Duration="0:0:0.75"
+                                 AutoReverse="True"/>
+            </Storyboard>
+
+            <!-- Ocr Bouncing Dots -->
+            <Storyboard x:Key="OcrBouncingDotsStoryboard" RepeatBehavior="Forever">
+                <DoubleAnimation Storyboard.TargetName="OcrDot1Transform"
+                                 Storyboard.TargetProperty="Y"
+                                 From="0" To="-5" Duration="0:0:0.3"
+                                 AutoReverse="True">
+                    <DoubleAnimation.EasingFunction>
+                        <QuadraticEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="OcrDot2Transform"
+                                 Storyboard.TargetProperty="Y"
+                                 From="0" To="-5" Duration="0:0:0.3"
+                                 BeginTime="0:0:0.1"
+                                 AutoReverse="True">
+                    <DoubleAnimation.EasingFunction>
+                        <QuadraticEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="OcrDot3Transform"
+                                 Storyboard.TargetProperty="Y"
+                                 From="0" To="-5" Duration="0:0:0.3"
+                                 BeginTime="0:0:0.2"
+                                 AutoReverse="True">
+                    <DoubleAnimation.EasingFunction>
+                        <QuadraticEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+
+            <!-- Trans Bouncing Dots -->
+            <Storyboard x:Key="TransBouncingDotsStoryboard" RepeatBehavior="Forever">
+                <DoubleAnimation Storyboard.TargetName="TransDot1Transform"
+                                 Storyboard.TargetProperty="Y"
+                                 From="0" To="-5" Duration="0:0:0.3"
+                                 AutoReverse="True">
+                    <DoubleAnimation.EasingFunction>
+                        <QuadraticEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="TransDot2Transform"
+                                 Storyboard.TargetProperty="Y"
+                                 From="0" To="-5" Duration="0:0:0.3"
+                                 BeginTime="0:0:0.1"
+                                 AutoReverse="True">
+                    <DoubleAnimation.EasingFunction>
+                        <QuadraticEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+                <DoubleAnimation Storyboard.TargetName="TransDot3Transform"
+                                 Storyboard.TargetProperty="Y"
+                                 From="0" To="-5" Duration="0:0:0.3"
+                                 BeginTime="0:0:0.2"
+                                 AutoReverse="True">
+                    <DoubleAnimation.EasingFunction>
+                        <QuadraticEase EasingMode="EaseOut"/>
+                    </DoubleAnimation.EasingFunction>
+                </DoubleAnimation>
+            </Storyboard>
+        </ResourceDictionary>
+    </Window.Resources>
+
+    <Window.Triggers>
+        <EventTrigger RoutedEvent="Window.Loaded">
+            <BeginStoryboard>
+                <Storyboard>
+                    <DoubleAnimation Storyboard.TargetProperty="Opacity" From="0" To="1" Duration="0:0:0.25"/>
+                    <DoubleAnimation Storyboard.TargetName="mainWindowGrid" Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="20" To="0" Duration="0:0:0.35">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut"/></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </BeginStoryboard>
+        </EventTrigger>
+    </Window.Triggers>
+
+    <Border Background="{StaticResource MainGradientBrush}" 
+            CornerRadius="20"
+            Margin="40">
+        <Border.Effect>
+            <DropShadowEffect BlurRadius="40" ShadowDepth="10" Direction="270" Color="#ef629f" Opacity="0.3"/>
+        </Border.Effect>
+
+        <Border Background="{StaticResource WhiteGlassBrush}"
+                CornerRadius="18"
+                Margin="2">
+            <Grid>
+                <Grid Name="mainWindowGrid" Margin="25,15,25,25">
+                <Grid.RenderTransform>
+                    <TranslateTransform Y="0"/>
+                </Grid.RenderTransform>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+            <!-- Header Row -->
+            <Grid Grid.Row="0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Logo - Custom SVG icon as paths -->
+                <Viewbox x:Name="LogoViewbox" Grid.Column="0" Width="28" Height="28" Margin="15,0,8,0" RenderTransformOrigin="0.5,0.5">
+                    <Viewbox.RenderTransform>
+                        <RotateTransform x:Name="LogoTransform" Angle="0"/>
+                    </Viewbox.RenderTransform>
+                    <Canvas Width="16" Height="16">
+                        <Path Fill="{StaticResource MainGradientBrush}" Data="M4.545 6.714 4.11 8H3l1.862-5h1.284L8 8H6.833l-.435-1.286H4.545zm1.634-.736L5.5 3.956h-.049l-.679 2.022H6.18z"/>
+                        <Path Fill="{StaticResource MainGradientBrush}" Data="M0 2a2 2 0 0 1 2-2h7a2 2 0 0 1 2 2v3h3a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2v-3H2a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v7a1 1 0 0 0 1 1h7a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H2zm7.138 9.995c.193.301.402.583.63.846-.748.575-1.673 1.001-2.768 1.292.178.217.451.635.555.867 1.125-.359 2.08-.844 2.886-1.494.777.665 1.739 1.165 2.93 1.472.133-.254.414-.673.629-.89-1.125-.253-2.057-.694-2.82-1.284.681-.747 1.222-1.651 1.621-2.757H14V8h-3v1.047h.765c-.318.844-.74 1.546-1.272 2.13a6.066 6.066 0 0 1-.415-.492 1.988 1.988 0 0 1-.94.31z"/>
+                    </Canvas>
+                </Viewbox>
+
+                <!-- Title & Version -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="0,0,10,0">
+                    <TextBlock Text="SnapTranslator" 
+                               Style="{StaticResource TitleStyle}"/>
+                    <TextBlock x:Name="AppVersionText" Text="v1.0.0" Foreground="Gray" FontSize="11" Margin="2,-2,0,0"/>
+                </StackPanel>
+
+                <!-- Spacer / Hint -->
+                <TextBlock Grid.Column="2" Text="Dịch nhanh:   Alt + Space" 
+                           Foreground="Gray" FontSize="12" Margin="-70,0,0,0" 
+                           VerticalAlignment="Center" HorizontalAlignment="Center"/>
+
+                <!-- Action Buttons -->
+                <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="0">
+                    <!-- SnipButton moved -->
+
+                    <!-- Settings Button -->
+                    <Button Style="{StaticResource SvgButtonStyle}" ToolTip="Cài đặt API"
+                            Click="OnSettingsClick">
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="24" Height="24">
+                                <Path Fill="#5f6368" Data="M19.14,12.94c0.04-0.3,0.06-0.61,0.06-0.94c0-0.32-0.02-0.64-0.06-0.94l2.03-1.58c0.18-0.14,0.23-0.41,0.12-0.61 l-1.92-3.32c-0.12-0.22-0.37-0.29-0.59-0.22l-2.39,0.96c-0.5-0.38-1.03-0.7-1.62-0.94L14.4,2.81c-0.04-0.24-0.24-0.41-0.48-0.41 h-3.84c-0.24,0-0.43,0.17-0.47,0.41L9.25,5.35C8.66,5.59,8.12,5.92,7.63,6.29L5.24,5.33c-0.22-0.08-0.47,0-0.59,0.22L2.73,8.87 C2.62,9.08,2.66,9.34,2.86,9.48l2.03,1.58C4.84,11.36,4.8,11.69,4.8,12s0.02,0.64,0.06,0.94l-2.03,1.58 c-0.18,0.14-0.23,0.41-0.12,0.61l1.92,3.32c0.12,0.22,0.37,0.29,0.59,0.22l2.39-0.96c0.5,0.38,1.03,0.7,1.62,0.94l0.36,2.54 C9.71,21.83,9.91,22,10.16,22h3.84c0.24,0,0.43-0.17,0.47-0.41l0.36-2.54c0.59-0.24,1.13-0.56,1.62-0.94l2.39,0.96 c0.22,0.08,0.47,0,0.59-0.22l1.92-3.32c0.12-0.22,0.07-0.49-0.12-0.61L19.14,12.94z M12,15.6c-1.98,0-3.6-1.62-3.6-3.6 s1.62-3.6,3.6-3.6s3.6,1.62,3.6,3.6S13.98,15.6,12,15.6z"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Minimize Button -->
+                    <Button Style="{StaticResource SvgButtonStyle}" ToolTip="Thu nhỏ"
+                            Click="OnMinimizeClick">
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="24" Height="24">
+                                <Line X1="5" Y1="12" X2="19" Y2="12" Stroke="#5f6368" StrokeThickness="2"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+
+                    <!-- Close Button -->
+                    <Button Style="{StaticResource CloseButtonStyle}" ToolTip="Đóng"
+                            Click="OnCloseClick">
+                        <Viewbox Width="20" Height="20">
+                            <Canvas Width="24" Height="24">
+                                <Line X1="18" Y1="6" X2="6" Y2="18" Stroke="#5f6368" StrokeThickness="2"/>
+                                <Line X1="6" Y1="6" X2="18" Y2="18" Stroke="#5f6368" StrokeThickness="2"/>
+                            </Canvas>
+                        </Viewbox>
+                    </Button>
+                </StackPanel>
+            </Grid>
+
+            <!-- Source Language Label -->
+            <TextBlock x:Name="SourceLangLabel" Grid.Row="1" 
+                       Text="{Binding SourceLang}"
+                       Style="{StaticResource BaseLabelStyle}"
+                       Margin="20,10,0,0"/>
+
+            <!-- Original Text Box Area -->
+            <Grid Grid.Row="2" Margin="0,5,0,0">
+                <TextBox x:Name="OriginalTextBox"
+                         Text="{Binding OriginalText, UpdateSourceTrigger=PropertyChanged}"
+                         Style="{StaticResource OriginalTextBoxStyle}"
+                         MinHeight="90"
+                         Padding="15,15,45,15"
+                         TextChanged="OnOriginalTextChanged"/>
+                         
+                <Button x:Name="ClearButton" Style="{StaticResource SvgButtonStyle}" 
+                        ToolTip="Xóa (Clear)"
+                        Click="OnClearClick"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="0,10,10,0"
+                        Visibility="{Binding IsClearButtonVisible, Converter={StaticResource BoolToVis}}">
+                    <Viewbox Width="18" Height="18">
+                        <Canvas Width="24" Height="24">
+                            <Line X1="18" Y1="6" X2="6" Y2="18" Stroke="#888888" StrokeThickness="2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                            <Line X1="6" Y1="6" X2="18" Y2="18" Stroke="#888888" StrokeThickness="2" StrokeLineJoin="Round" StrokeStartLineCap="Round" StrokeEndLineCap="Round"/>
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+                         
+                <Button x:Name="SnipButton" Style="{StaticResource SvgButtonStyle}" 
+                        ToolTip="Chọn vùng OCR mới (Alt+Space)"
+                        Click="OnSnipClick"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,10,10">
+                    <Viewbox Width="30" Height="30">
+                        <Grid Width="22" Height="22" HorizontalAlignment="Center" VerticalAlignment="Center">
+                            <!-- Top and top corners bracket with camera bump -->
+                            <Path Stroke="#888888" StrokeThickness="1.8" StrokeLineJoin="Round" StrokeEndLineCap="Round" StrokeStartLineCap="Round"
+                                  Data="M 6,10.5 V 8.5 C 6,7.1 7.1,6 8.5,6 H 9.5 L 10.2,4.5 H 11.8 L 12.5,6 H 13.5 C 14.9,6 16,7.1 16,8.5 V 10.5" />
+                            <!-- Bottom-left bracket -->
+                            <Path Stroke="#888888" StrokeThickness="1.8" StrokeLineJoin="Round" StrokeEndLineCap="Round" StrokeStartLineCap="Round"
+                                  Data="M 6,12.5 V 13.5 C 6,14.9 7.1,16 8.5,16 H 10.5" />
+                            <!-- Center lens dot -->
+                            <Ellipse Width="4" Height="4" Fill="#888888" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                            <!-- Bottom-right dot (flash indicator) -->
+                            <Ellipse Width="2.5" Height="2.5" Fill="#888888" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,5,5"/>
+                        </Grid>
+                    </Viewbox>
+                </Button>
+
+                <Border x:Name="OcrLoadingOverlay" Background="{StaticResource BgLightBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" CornerRadius="15" Visibility="{Binding IsOcrLoading, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="15,15,0,0">
+                        <TextBlock Text="Đang trích xuất" FontFamily="{StaticResource DefaultFontFamily}" FontSize="22" Foreground="{StaticResource TextPrimaryBrush}" VerticalAlignment="Bottom"/>
+                        <StackPanel Orientation="Horizontal" Margin="4,0,0,5" VerticalAlignment="Bottom">
+                            <Ellipse Width="4" Height="4" Fill="{StaticResource TextPrimaryBrush}" Margin="1.5,0">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="OcrDot1Transform"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Ellipse Width="4" Height="4" Fill="{StaticResource TextPrimaryBrush}" Margin="1.5,0">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="OcrDot2Transform"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Ellipse Width="4" Height="4" Fill="{StaticResource TextPrimaryBrush}" Margin="1.5,0">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="OcrDot3Transform"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Translation Tabs -->
+            <Grid Grid.Row="3" Margin="0,10,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <Button x:Name="TabVi" Grid.Column="0" 
+                        Content="Tiếng Việt"
+                        Click="OnTabViClick"
+                        Margin="6,0,10,0"/>
+
+                <Button x:Name="TabEn" Grid.Column="1"
+                        Content="Tiếng Anh"
+                        Click="OnTabEnClick"/>
+
+                <ComboBox x:Name="EngineSelector" Grid.Column="2" 
+                          Style="{StaticResource RoundedComboBoxStyle}"
+                          HorizontalAlignment="Right" 
+                          VerticalAlignment="Center" 
+                          Width="155"
+                          SelectionChanged="OnEngineChanged">
+                    <ComboBoxItem IsSelected="True" Content="Google Translate"/>
+                    <ComboBoxItem Content="Local LLM"/>
+                    <ComboBoxItem Content="DeepSeek"/>
+                </ComboBox>
+            </Grid>
+
+            <Grid Grid.Row="4" Margin="0,5,0,0">
+                <TextBox x:Name="TranslatedTextBox"
+                         Text="{Binding TranslatedText}"
+                         Style="{StaticResource TranslatedTextBoxStyle}"
+                         MinHeight="90"
+                         Padding="15,15,45,15"
+                         IsReadOnly="True"
+                         TextChanged="OnTranslatedTextChanged"/>
+                         
+                <Button x:Name="CopyButton" Style="{StaticResource SvgButtonStyle}" 
+                        ToolTip="Sao chép"
+                        Click="OnCopyClick"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Margin="0,0,10,10"
+                        Visibility="{Binding IsCopyButtonVisible, Converter={StaticResource BoolToVis}}">
+                    <Viewbox Width="25" Height="25">
+                        <Canvas Width="25" Height="25">
+                            <Path Stroke="#888888" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeEndLineCap="Round" StrokeStartLineCap="Round"
+                                  Data="M17.676 14.248C17.676 15.8651 16.3651 17.176 14.748 17.176H7.428C5.81091 17.176 4.5 15.8651 4.5 14.248V6.928C4.5 5.31091 5.81091 4 7.428 4H14.748C16.3651 4 17.676 5.31091 17.676 6.928V14.248Z" />
+                            <Path Stroke="#888888" StrokeThickness="1.5" StrokeLineJoin="Round" StrokeEndLineCap="Round" StrokeStartLineCap="Round"
+                                  Data="M10.252 20H17.572C19.1891 20 20.5 18.689 20.5 17.072V9.75195" />
+                        </Canvas>
+                    </Viewbox>
+                </Button>
+                         
+                <Border x:Name="TransLoadingOverlay" Background="{StaticResource BgTranslateBrush}" CornerRadius="15" Visibility="{Binding IsTransLoading, Converter={StaticResource BoolToVis}}">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="15,15,0,0">
+                        <TextBlock Text="Đang dịch" FontFamily="{StaticResource DefaultFontFamily}" FontSize="22" FontWeight="Medium" Foreground="{StaticResource TranslateTextBrush}" VerticalAlignment="Bottom"/>
+                        <StackPanel Orientation="Horizontal" Margin="4,0,0,5" VerticalAlignment="Bottom">
+                            <Ellipse Width="4" Height="4" Fill="{StaticResource MainGradientBrush}" Margin="1.5,0">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="TransDot1Transform"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Ellipse Width="4" Height="4" Fill="{StaticResource MainGradientBrush}" Margin="1.5,0">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="TransDot2Transform"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                            <Ellipse Width="4" Height="4" Fill="{StaticResource MainGradientBrush}" Margin="1.5,0">
+                                <Ellipse.RenderTransform>
+                                    <TranslateTransform x:Name="TransDot3Transform"/>
+                                </Ellipse.RenderTransform>
+                            </Ellipse>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+            </Grid>
+
+            <!-- Debug Panel -->
+            <StackPanel x:Name="DebugPanel" Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,5,25,0" Visibility="{Binding IsDebugPanelVisible, Converter={StaticResource BoolToVis}}">
+                <TextBlock Foreground="Gray" FontSize="11" Margin="0,0,10,0"><Run Text="Total:" /> <Run x:Name="RunTotalTokens" Text="{Binding TotalTokens}"/></TextBlock>
+                <TextBlock Foreground="Gray" FontSize="11" Margin="0,0,10,0"><Run Text="Cache Hit:" /> <Run x:Name="RunCacheHit" Text="{Binding CacheHitTokens}"/></TextBlock>
+                <TextBlock Foreground="Gray" FontSize="11"><Run Text="Cache Miss:" /> <Run x:Name="RunCacheMiss" Text="{Binding CacheMissTokens}"/></TextBlock>
+            </StackPanel>
+        </Grid>
+            <!-- Toast Notification -->
+            <Border x:Name="ToastBorder" HorizontalAlignment="Center" VerticalAlignment="Top" 
+                    Background="{StaticResource MainGradientBrush}" BorderThickness="0" 
+                    CornerRadius="15" Margin="0,15,0,0" Padding="15,8"
+                    IsHitTestVisible="False" Opacity="0"
+                    Visibility="Collapsed"
+                    Panel.ZIndex="100">
+                <Border.Effect>
+                    <DropShadowEffect BlurRadius="10" ShadowDepth="4" Direction="270" Color="#ef629f" Opacity="0.3"/>
+                </Border.Effect>
+                <StackPanel Orientation="Horizontal">
+                    <Path Fill="White" Data="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" Width="14" Height="14" Margin="0,0,8,0" Stretch="Uniform" VerticalAlignment="Center"/>
+                    <TextBlock Text="Đã sao chép bản dịch" Foreground="White" FontFamily="{StaticResource DefaultFontFamily}" FontSize="13" FontWeight="Medium" VerticalAlignment="Center"/>
+                </StackPanel>
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="ToastTransform" Y="-20"/>
+                </Border.RenderTransform>
+            </Border>
+            <!-- Resizing Thumbs Overlay -->
+            <Grid>
+                <Grid.Resources>
+                    <ControlTemplate x:Key="InvisibleThumb" TargetType="Thumb">
+                        <Rectangle Fill="Transparent"/>
+                    </ControlTemplate>
+                </Grid.Resources>
+                <!-- Corners -->
+                <Thumb Width="8" Height="8" HorizontalAlignment="Left" VerticalAlignment="Top" Cursor="SizeNWSE" DragDelta="Resize_DragDelta" Tag="TL" Template="{StaticResource InvisibleThumb}"/>
+                <Thumb Width="8" Height="8" HorizontalAlignment="Right" VerticalAlignment="Top" Cursor="SizeNESW" DragDelta="Resize_DragDelta" Tag="TR" Template="{StaticResource InvisibleThumb}"/>
+                <Thumb Width="8" Height="8" HorizontalAlignment="Left" VerticalAlignment="Bottom" Cursor="SizeNESW" DragDelta="Resize_DragDelta" Tag="BL" Template="{StaticResource InvisibleThumb}"/>
+                <Thumb Width="8" Height="8" HorizontalAlignment="Right" VerticalAlignment="Bottom" Cursor="SizeNWSE" DragDelta="Resize_DragDelta" Tag="BR" Template="{StaticResource InvisibleThumb}"/>
+                <!-- Edges -->
+                <Thumb Height="6" Margin="8,0,8,0" HorizontalAlignment="Stretch" VerticalAlignment="Top" Cursor="SizeNS" DragDelta="Resize_DragDelta" Tag="T" Template="{StaticResource InvisibleThumb}"/>
+                <Thumb Height="6" Margin="8,0,8,0" HorizontalAlignment="Stretch" VerticalAlignment="Bottom" Cursor="SizeNS" DragDelta="Resize_DragDelta" Tag="B" Template="{StaticResource InvisibleThumb}"/>
+                <Thumb Width="6" Margin="0,8,0,8" HorizontalAlignment="Left" VerticalAlignment="Stretch" Cursor="SizeWE" DragDelta="Resize_DragDelta" Tag="L" Template="{StaticResource InvisibleThumb}"/>
+                <Thumb Width="6" Margin="0,8,0,8" HorizontalAlignment="Right" VerticalAlignment="Stretch" Cursor="SizeWE" DragDelta="Resize_DragDelta" Tag="R" Template="{StaticResource InvisibleThumb}"/>
+            </Grid>
+            </Grid>
+        </Border>
+    </Border>
+</Window>
