@@ -76,7 +76,7 @@ namespace SnapTranslate.Models
                         var path = Environment.ProcessPath;
                         if (!string.IsNullOrEmpty(path))
                         {
-                            key.SetValue(StartupKey, $"\"{path}\"");
+                            key.SetValue(StartupKey, $"\"{path}\" --minimized");
                         }
                     }
                     else

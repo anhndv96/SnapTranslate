@@ -10,6 +10,7 @@ namespace SnapTranslate
         private MainWindow? _mainWindow;
         private Hardcodet.Wpf.TaskbarNotification.TaskbarIcon? _notifyIcon;
         private System.Drawing.Icon? _trayIcon;
+        private static System.Threading.EventWaitHandle? _eventWaitHandle;
 
         // ===== Per-Monitor V2 DPI Awareness =====
         [DllImport("user32.dll", SetLastError = true)]
@@ -116,14 +117,51 @@ namespace SnapTranslate
             System.Threading.Tasks.TaskScheduler.UnobservedTaskException += OnUnobservedTaskException;
 
             const string appName = "SnapTranslate_SingleInstance_Mutex";
+            const string eventName = "SnapTranslate_SingleInstance_Event";
+
             _mutex = new System.Threading.Mutex(true, appName, out bool createdNew);
 
             if (!createdNew)
             {
-                // App is already running, exit immediately
+                // App is already running, signal the existing instance to show its window and exit
+                try
+                {
+                    using (var eventHandle = System.Threading.EventWaitHandle.OpenExisting(eventName))
+                    {
+                        eventHandle.Set();
+                    }
+                }
+                catch { }
                 Environment.Exit(0);
                 return;
             }
+
+            try
+            {
+                _eventWaitHandle = new System.Threading.EventWaitHandle(false, System.Threading.EventResetMode.AutoReset, eventName);
+                System.Threading.ThreadPool.QueueUserWorkItem(state =>
+                {
+                    while (true)
+                    {
+                        try
+                        {
+                            if (_eventWaitHandle.WaitOne())
+                            {
+                                _instance?.Dispatcher.BeginInvoke(() =>
+                                {
+                                    _mainWindow?.ShowWindow();
+                                });
+                            }
+                        }
+                        catch (ObjectDisposedException)
+                        {
+                            break;
+                        }
+                        catch { }
+                    }
+                });
+            }
+            catch { }
 
             ConfigureDpiAwareness();
             base.OnStartup(e);
@@ -131,7 +169,22 @@ namespace SnapTranslate
             _instance = this;
 
             _mainWindow = new MainWindow();
-            _mainWindow.Show();
+
+            bool startMinimized = false;
+            foreach (var arg in e.Args)
+            {
+                if (arg.Equals("--minimized", StringComparison.OrdinalIgnoreCase) || 
+                    arg.Equals("/minimized", StringComparison.OrdinalIgnoreCase))
+                {
+                    startMinimized = true;
+                    break;
+                }
+            }
+
+            if (!startMinimized)
+            {
+                _mainWindow.Show();
+            }
 
             SetupTrayIcon();
             InstallHook();
@@ -164,6 +217,15 @@ namespace SnapTranslate
             UninstallHook();
             _notifyIcon?.Dispose();
             _trayIcon?.Dispose();
+            if (_eventWaitHandle != null)
+            {
+                try
+                {
+                    _eventWaitHandle.Close();
+                }
+                catch { }
+                _eventWaitHandle.Dispose();
+            }
             if (_mutex != null)
             {
                 try
@@ -211,6 +273,10 @@ namespace SnapTranslate
             _notifyIcon.Visibility  = Visibility.Visible;
 
             var contextMenu = new System.Windows.Controls.ContextMenu();
+
+            var showItem = new System.Windows.Controls.MenuItem { Header = "Hiện giao diện" };
+            showItem.Click += (s, args) => _mainWindow?.ShowWindow();
+            contextMenu.Items.Add(showItem);
 
             var snipItem = new System.Windows.Controls.MenuItem { Header = "Dịch (Alt+Space)" };
             snipItem.Click += (s, args) => StartSnipping();

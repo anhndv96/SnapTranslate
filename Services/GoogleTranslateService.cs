@@ -62,7 +62,7 @@ namespace SnapTranslate.Services
             _tokenTime = DateTime.UtcNow;
         }
 
-        public async Task<TranslateResult> TranslateAsync(string text, string target = "vi")
+        public async Task<TranslateResult> TranslateAsync(string text, string target = "vi", Action<string>? onChunkReceived = null)
         {
             if (string.IsNullOrWhiteSpace(text))
                 return new TranslateResult { Translated = "", Detected = "unknown" };

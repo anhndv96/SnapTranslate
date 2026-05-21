@@ -105,79 +105,307 @@ Mandatory tasks:
             return total;
         }
 
-        public async Task<TranslateResult> TranslateAsync(string text, string target = "vi")
+        public Task<TranslateResult> TranslateAsync(string text, string target = "vi", Action<string>? onChunkReceived = null)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return new TranslateResult { Translated = "", Detected = "unknown" };
-
-            string apiKey = AppSettings.Current.DeepSeekApiKey;
-            if (string.IsNullOrEmpty(apiKey))
+            return Task.Run(async () =>
             {
-                return new TranslateResult { Translated = "Lỗi: Chưa cấu hình DeepSeek API Key. Hãy mở cài đặt (hình bánh răng).", Detected = "error" };
-            }
+                if (string.IsNullOrWhiteSpace(text))
+                    return new TranslateResult { Translated = "", Detected = "unknown" };
 
-            // Flush context if target language changed or inactive for 1 hour
-            if (target != _lastTarget || (_lastRequestTime > DateTime.MinValue && (DateTime.Now - _lastRequestTime).TotalHours >= 1))
-            {
-                ResetContext(target);
-            }
+                string apiKey = AppSettings.Current.DeepSeekApiKey;
+                if (string.IsNullOrEmpty(apiKey))
+                {
+                    return new TranslateResult { Translated = "Lỗi: Chưa cấu hình DeepSeek API Key. Hãy mở cài đặt (hình bánh răng).", Detected = "error" };
+                }
 
-            var userMsg = new Message { Role = "user", Content = $"Dịch đoạn sau:\n{text}" };
-            
-            // Rebuild context completely if token limit is exceeded
-            int projectedTokens = EstimateTotalTokens() + CountTokens(userMsg.Role) + CountTokens(userMsg.Content) + 1000;
-            if (projectedTokens > MaxTokens)
-            {
-                ResetContext(target);
-            }
+                // Flush context if target language changed or inactive for 1 hour
+                if (target != _lastTarget || (_lastRequestTime > DateTime.MinValue && (DateTime.Now - _lastRequestTime).TotalHours >= 1))
+                {
+                    ResetContext(target);
+                }
 
-            _messages.Add(userMsg);
+                var userMsg = new Message { Role = "user", Content = $"Dịch đoạn sau:\n{text}" };
+                
+                // Rebuild context completely if token limit is exceeded
+                int projectedTokens = EstimateTotalTokens() + CountTokens(userMsg.Role) + CountTokens(userMsg.Content) + 1000;
+                if (projectedTokens > MaxTokens)
+                {
+                    ResetContext(target);
+                }
 
+                _messages.Add(userMsg);
+
+                object requestBody;
+                if (onChunkReceived != null)
+                {
+                    requestBody = new
+                    {
+                        model = Model,
+                        messages = _messages.Select(m => new { role = m.Role, content = m.Content }).ToList(),
+                        temperature = 0.2,
+                        stream = true,
+                        stream_options = new { include_usage = true }
+                    };
+                }
+                else
+                {
+                    requestBody = new
+                    {
+                        model = Model,
+                        messages = _messages.Select(m => new { role = m.Role, content = m.Content }).ToList(),
+                        temperature = 0.2
+                    };
+                }
+
+                var request = new HttpRequestMessage(HttpMethod.Post, ApiUrl);
+                request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
+                request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+
+                if (onChunkReceived != null)
+                {
+                    request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
+
+                    try
+                    {
+                        var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                        
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            var errStr = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            
+                            // If Bad Request, try falling back immediately to streaming without stream_options
+                            if (response.StatusCode == System.Net.HttpStatusCode.BadRequest || errStr.Contains("stream_options") || errStr.Contains("extra inputs"))
+                            {
+                                response.Dispose();
+                                return await TranslateStreamWithoutOptionsAsync(text, target, onChunkReceived, apiKey).ConfigureAwait(false);
+                            }
+
+                            _messages.RemoveAt(_messages.Count - 1);
+                            return new TranslateResult { Translated = $"Lỗi DeepSeek API: {response.StatusCode} - {errStr}", Detected = "error" };
+                        }
+
+                        var contentBuilder = new StringBuilder();
+                        int totalTokens = 0, hitTokens = 0, missTokens = 0;
+
+                        using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        using (var reader = new System.IO.StreamReader(stream))
+                        {
+                            while (!reader.EndOfStream)
+                            {
+                                var line = await reader.ReadLineAsync().ConfigureAwait(false);
+                                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                                if (line.StartsWith("data:"))
+                                {
+                                    var data = line.Substring("data:".Length).Trim();
+                                    if (data == "[DONE]") break;
+
+                                    // THÊM DÒNG NÀY: Bỏ qua ngay các chuỗi rỗng hoặc không phải JSON để chống văng Exception
+                                    if (string.IsNullOrEmpty(data) || !data.StartsWith("{")) continue;
+
+                                    try
+                                    {
+                                        using var doc = JsonDocument.Parse(data);
+                                        var root = doc.RootElement;
+
+                                        // 1. Lấy Nội Dung (Xử lý an toàn tuyệt đối với null)
+                                        if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+                                        {
+                                            var choice = choices[0];
+                                            if (choice.TryGetProperty("delta", out var delta) && delta.ValueKind == JsonValueKind.Object)
+                                            {
+                                                // Chỉ đọc content nếu nó TỒN TẠI và LÀ CHUỖI (Bỏ qua chunk có content = null)
+                                                if (delta.TryGetProperty("content", out var contentProp) && contentProp.ValueKind == JsonValueKind.String)
+                                                {
+                                                    var content = contentProp.GetString();
+                                                    if (!string.IsNullOrEmpty(content))
+                                                    {
+                                                        contentBuilder.Append(content);
+                                                        onChunkReceived?.Invoke(content);
+                                                    }
+                                                }
+                                            }
+                                        }
+
+                                        // 2. Lấy Thông Tin Token (Xử lý an toàn với usage = null)
+                                        if (root.TryGetProperty("usage", out var usageProp) && usageProp.ValueKind == JsonValueKind.Object)
+                                        {
+                                            if (usageProp.TryGetProperty("total_tokens", out var tt) && tt.ValueKind == JsonValueKind.Number)
+                                                totalTokens = tt.GetInt32();
+                                            if (usageProp.TryGetProperty("prompt_cache_hit_tokens", out var ht) && ht.ValueKind == JsonValueKind.Number)
+                                                hitTokens = ht.GetInt32();
+                                            if (usageProp.TryGetProperty("prompt_cache_miss_tokens", out var mt) && mt.ValueKind == JsonValueKind.Number)
+                                                missTokens = mt.GetInt32();
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Ignore JSON parse errors on invalid/incomplete stream chunks
+                                    }
+                                }
+                            }
+                        }
+
+                        var contentStr = contentBuilder.ToString();
+                        _messages.Add(new Message { Role = "assistant", Content = contentStr });
+                        _lastRequestTime = DateTime.Now;
+
+                        return new TranslateResult
+                        {
+                            Translated = contentStr,
+                            Detected = LanguageDetector.Detect(text),
+                            TotalTokens = totalTokens,
+                            CacheHitTokens = hitTokens,
+                            CacheMissTokens = missTokens
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        try
+                        {
+                            return await TranslateStreamWithoutOptionsAsync(text, target, onChunkReceived, apiKey).ConfigureAwait(false);
+                        }
+                        catch
+                        {
+                            if (_messages.LastOrDefault()?.Role == "user")
+                                _messages.RemoveAt(_messages.Count - 1);
+
+                            return new TranslateResult { Translated = $"Lỗi DeepSeek: {ex.Message}", Detected = "error" };
+                        }
+                    }
+                }
+                else
+                {
+                    try
+                    {
+                        using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+                        
+                        if (!response.IsSuccessStatusCode)
+                        {
+                            var errStr = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                            _messages.RemoveAt(_messages.Count - 1);
+                            return new TranslateResult { Translated = $"Lỗi DeepSeek API: {response.StatusCode} - {errStr}", Detected = "error" };
+                        }
+
+                        var responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        using var doc = JsonDocument.Parse(responseString);
+                        var root = doc.RootElement;
+                        
+                        var contentStr = root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+                        
+                        int totalTokens = 0, hitTokens = 0, missTokens = 0;
+                        if (root.TryGetProperty("usage", out var usageProp))
+                        {
+                            if (usageProp.TryGetProperty("total_tokens", out var tt)) totalTokens = tt.GetInt32();
+                            if (usageProp.TryGetProperty("prompt_cache_hit_tokens", out var ht)) hitTokens = ht.GetInt32();
+                            if (usageProp.TryGetProperty("prompt_cache_miss_tokens", out var mt)) missTokens = mt.GetInt32();
+                        }
+                        
+                        _messages.Add(new Message { Role = "assistant", Content = contentStr });
+                        _lastRequestTime = DateTime.Now;
+
+                        return new TranslateResult { 
+                            Translated = contentStr, 
+                            Detected = LanguageDetector.Detect(text),
+                            TotalTokens = totalTokens,
+                            CacheHitTokens = hitTokens,
+                            CacheMissTokens = missTokens
+                        };
+                    }
+                    catch (Exception ex)
+                    {
+                        if (_messages.LastOrDefault()?.Role == "user")
+                            _messages.RemoveAt(_messages.Count - 1);
+
+                        return new TranslateResult { Translated = $"Lỗi DeepSeek: {ex.Message}", Detected = "error" };
+                    }
+                }
+            });
+        }
+
+        private async Task<TranslateResult> TranslateStreamWithoutOptionsAsync(string text, string target, Action<string> onChunkReceived, string apiKey)
+        {
             var requestBody = new
             {
                 model = Model,
                 messages = _messages.Select(m => new { role = m.Role, content = m.Content }).ToList(),
-                temperature = 0.2
+                temperature = 0.2,
+                stream = true
             };
 
             var request = new HttpRequestMessage(HttpMethod.Post, ApiUrl);
             request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
             request.Content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+            request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
 
             try
             {
-                using var response = await _httpClient.SendAsync(request).ConfigureAwait(false);
+                using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
                 
                 if (!response.IsSuccessStatusCode)
                 {
                     var errStr = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                    _messages.RemoveAt(_messages.Count - 1);
+                    if (_messages.LastOrDefault()?.Role == "user")
+                        _messages.RemoveAt(_messages.Count - 1);
                     return new TranslateResult { Translated = $"Lỗi DeepSeek API: {response.StatusCode} - {errStr}", Detected = "error" };
                 }
 
-                var responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                using var doc = JsonDocument.Parse(responseString);
-                var root = doc.RootElement;
-                
-                var contentStr = root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
-                
-                int totalTokens = 0, hitTokens = 0, missTokens = 0;
-                if (root.TryGetProperty("usage", out var usageProp))
+                var contentBuilder = new StringBuilder();
+
+                using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                using (var reader = new System.IO.StreamReader(stream))
                 {
-                    if (usageProp.TryGetProperty("total_tokens", out var tt)) totalTokens = tt.GetInt32();
-                    if (usageProp.TryGetProperty("prompt_cache_hit_tokens", out var ht)) hitTokens = ht.GetInt32();
-                    if (usageProp.TryGetProperty("prompt_cache_miss_tokens", out var mt)) missTokens = mt.GetInt32();
+                    while (!reader.EndOfStream)
+                    {
+                        var line = await reader.ReadLineAsync().ConfigureAwait(false);
+                        if (string.IsNullOrWhiteSpace(line)) continue;
+
+                        if (line.StartsWith("data:"))
+                        {
+                            var data = line.Substring("data:".Length).Trim();
+                            if (data == "[DONE]") break;
+
+                            // THÊM DÒNG NÀY: Bỏ qua ngay các chuỗi rỗng hoặc không phải JSON để chống văng Exception
+                            if (string.IsNullOrEmpty(data) || !data.StartsWith("{")) continue;
+
+                            try
+                            {
+                                using var doc = JsonDocument.Parse(data);
+                                var root = doc.RootElement;
+
+                                if (root.TryGetProperty("choices", out var choices) && choices.ValueKind == JsonValueKind.Array && choices.GetArrayLength() > 0)
+                                {
+                                    var choice = choices[0];
+                                    if (choice.TryGetProperty("delta", out var delta) && delta.TryGetProperty("content", out var contentProp))
+                                    {
+                                        var content = contentProp.GetString();
+                                        if (!string.IsNullOrEmpty(content))
+                                        {
+                                            contentBuilder.Append(content);
+                                            onChunkReceived(content);
+                                        }
+                                    }
+                                }
+                            }
+                            catch
+                            {
+                                // Ignore JSON parse errors on invalid/incomplete stream chunks
+                            }
+                        }
+                    }
                 }
-                
+
+                var contentStr = contentBuilder.ToString();
                 _messages.Add(new Message { Role = "assistant", Content = contentStr });
                 _lastRequestTime = DateTime.Now;
 
-                return new TranslateResult { 
-                    Translated = contentStr, 
+                return new TranslateResult
+                {
+                    Translated = contentStr,
                     Detected = LanguageDetector.Detect(text),
-                    TotalTokens = totalTokens,
-                    CacheHitTokens = hitTokens,
-                    CacheMissTokens = missTokens
+                    TotalTokens = 0,
+                    CacheHitTokens = 0,
+                    CacheMissTokens = 0
                 };
             }
             catch (Exception ex)

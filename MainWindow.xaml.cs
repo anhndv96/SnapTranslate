@@ -29,6 +29,10 @@ namespace SnapTranslate
         private readonly List<SnippingWindow> _activeSnippingWindows = new();
         private string _targetLang = "vi";
         private DispatcherTimer? _typeTimer;
+        private System.Threading.Timer? _streamTimer;
+        private readonly System.Text.StringBuilder _streamBuffer = new();
+        private readonly System.Text.StringBuilder _translatedAccumulator = new();
+        private readonly object _streamLock = new();
         private bool _isTranslating;
         private bool _isUpdating;
         private bool _isHeightManuallyResized = false;
@@ -88,6 +92,8 @@ namespace SnapTranslate
                 Interval = TimeSpan.FromMilliseconds(800)
             };
             _typeTimer.Tick += OnTypeTimerTick;
+
+            // _streamTimer is created on-demand in DoTranslateAsync
 
             UpdateTabStyles();
             
@@ -478,11 +484,39 @@ namespace SnapTranslate
             _viewModel.TranslatedText = "";
             StartTransLoading();
 
+            // Reset accumulators
+            lock (_streamLock)
+            {
+                _streamBuffer.Clear();
+                _translatedAccumulator.Clear();
+            }
+
+            // --- Performance: freeze layout during streaming ---
+            // 1. Disable SizeToContent so window doesn't relayout on every text change
+            this.SizeToContent = SizeToContent.Manual;
+            if (double.IsNaN(this.Height) || this.Height < this.ActualHeight)
+                this.Height = this.ActualHeight;
+            // 2. Disable undo tracking on the TextBox (very expensive during rapid updates)
+            TranslatedTextBox.IsUndoEnabled = false;
+
+            // Create a thread-pool timer that flushes buffered chunks to the UI every 100ms
+            _streamTimer?.Dispose();
+            _streamTimer = new System.Threading.Timer(_ => DrainStreamBuffer(), null, 100, 100);
+
             try
             {
-                var result = await _activeTranslateService.TranslateAsync(text, _targetLang);
+                var result = await _activeTranslateService.TranslateAsync(text, _targetLang, chunk =>
+                {
+                    lock (_streamLock)
+                    {
+                        _streamBuffer.Append(chunk);
+                    }
+                });
 
-                // Check if user cleared the text while we were translating
+                // Stop timer and flush any remaining buffered chunks
+                _streamTimer?.Dispose();
+                _streamTimer = null;
+                DrainStreamBuffer();
                 if (string.IsNullOrWhiteSpace(_viewModel.OriginalText))
                 {
                     _viewModel.TranslatedText = "";
@@ -525,6 +559,16 @@ namespace SnapTranslate
             {
                 _isTranslating = false;
                 StopTransLoading();
+                _streamTimer?.Dispose();
+                _streamTimer = null;
+                DrainStreamBuffer();
+
+                // --- Restore layout after streaming ---
+                TranslatedTextBox.IsUndoEnabled = true;
+                if (!_isHeightManuallyResized)
+                {
+                    ApplyAutoHeight();
+                }
 
                 if ((_viewModel.OriginalText?.Trim() ?? "") != _lastTranslatedText || _targetLang != _lastTranslatedLang)
                 {
@@ -633,6 +677,38 @@ namespace SnapTranslate
             ToastTransform.BeginAnimation(TranslateTransform.YProperty, slideUp);
         }
 
+        /// <summary>
+        /// Drains the stream buffer and pushes accumulated text to the UI.
+        /// Safe to call from any thread.
+        /// </summary>
+        private void DrainStreamBuffer()
+        {
+            string fullText;
+            lock (_streamLock)
+            {
+                if (_streamBuffer.Length == 0) return;
+                _translatedAccumulator.Append(_streamBuffer);
+                _streamBuffer.Clear();
+                fullText = _translatedAccumulator.ToString();
+            }
+
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                if (_viewModel.OriginalText?.Trim() == _lastTranslatedText)
+                {
+                    if (_viewModel.IsTransLoading)
+                    {
+                        StopTransLoading();
+                    }
+                    // Write directly to the TextBox, bypassing data binding
+                    // to avoid PropertyChanged → Binding → Measure/Arrange chain
+                    TranslatedTextBox.Text = fullText;
+                    // Keep ViewModel in sync (won't trigger re-render since TextBox already has the value)
+                    _viewModel.TranslatedText = fullText;
+                }
+            });
+        }
+
         private void UpdateTabStyles()
         {
             var activeStyle = FindResource("ActiveTabButtonStyle") as Style;
@@ -642,6 +718,7 @@ namespace SnapTranslate
             TabEn.Style = _targetLang == "en" ? activeStyle : inactiveStyle;
         }
 
+        // Existing Resize_DragDelta method
         private void Resize_DragDelta(object sender, System.Windows.Controls.Primitives.DragDeltaEventArgs e)
         {
             if (sender is System.Windows.Controls.Primitives.Thumb thumb && thumb.Tag is string tag)

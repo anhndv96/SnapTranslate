@@ -132,57 +132,147 @@ Task:
             }
         }
 
-        public async Task<TranslateResult> TranslateAsync(string text, string target = "vi")
+        public Task<TranslateResult> TranslateAsync(string text, string target = "vi", Action<string>? onChunkReceived = null)
         {
-            if (string.IsNullOrWhiteSpace(text))
-                return new TranslateResult { Translated = "", Detected = "unknown" };
-
-            if (target != _lastTarget)
+            return Task.Run(async () =>
             {
-                ResetContext(target);
-            }
+                if (string.IsNullOrWhiteSpace(text))
+                    return new TranslateResult { Translated = "", Detected = "unknown" };
 
-            // Add user message
-            _messages.AddLast(new Message { Role = "user", Content = text });
-            TrimIfNeeded();
+                if (target != _lastTarget)
+                {
+                    ResetContext(target);
+                }
 
-            var requestBody = new
-            {
-                model = Model,
-                messages = _messages.Select(m => new { role = m.Role, content = m.Content }).ToList(),
-                temperature = 0.2
-            };
+                // Add user message
+                _messages.AddLast(new Message { Role = "user", Content = text });
+                TrimIfNeeded();
 
-            var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+                object requestBody;
+                if (onChunkReceived != null)
+                {
+                    requestBody = new
+                    {
+                        model = Model,
+                        messages = _messages.Select(m => new { role = m.Role, content = m.Content }).ToList(),
+                        temperature = 0.2,
+                        stream = true
+                    };
+                }
+                else
+                {
+                    requestBody = new
+                    {
+                        model = Model,
+                        messages = _messages.Select(m => new { role = m.Role, content = m.Content }).ToList(),
+                        temperature = 0.2
+                    };
+                }
 
-            try
-            {
-                var endpointUrl = string.IsNullOrWhiteSpace(SnapTranslate.Models.AppSettings.Current.LocalLlmUrl)
-                    ? "http://localhost:1234/v1/chat/completions"
-                    : SnapTranslate.Models.AppSettings.Current.LocalLlmUrl;
-                using var response = await _httpClient.PostAsync(endpointUrl, jsonContent).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
+                if (onChunkReceived != null)
+                {
+                    try
+                    {
+                        var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+                        var endpointUrl = string.IsNullOrWhiteSpace(SnapTranslate.Models.AppSettings.Current.LocalLlmUrl)
+                            ? "http://localhost:1234/v1/chat/completions"
+                            : SnapTranslate.Models.AppSettings.Current.LocalLlmUrl;
 
-                var responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-                
-                using var doc = JsonDocument.Parse(responseString);
-                var root = doc.RootElement;
-                
-                var contentStr = root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
-                
-                // Add assistant response to context
-                _messages.AddLast(new Message { Role = "assistant", Content = contentStr });
+                        var request = new HttpRequestMessage(HttpMethod.Post, endpointUrl);
+                        request.Content = jsonContent;
+                        request.Headers.Accept.Add(new System.Net.Http.Headers.MediaTypeWithQualityHeaderValue("text/event-stream"));
 
-                return new TranslateResult { Translated = contentStr, Detected = LanguageDetector.Detect(text) };
-            }
-            catch (Exception ex)
-            {
-                // Remove the user message if failed to translate
-                if (_messages.Last != null && _messages.Last.Value.Role == "user")
-                    _messages.RemoveLast();
+                        using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
+                        response.EnsureSuccessStatusCode();
 
-                return new TranslateResult { Translated = $"Lỗi LLM: {ex.Message}", Detected = "error" };
-            }
+                        var contentBuilder = new StringBuilder();
+
+                        using (var stream = await response.Content.ReadAsStreamAsync().ConfigureAwait(false))
+                        using (var reader = new System.IO.StreamReader(stream))
+                        {
+                            while (!reader.EndOfStream)
+                            {
+                                var line = await reader.ReadLineAsync().ConfigureAwait(false);
+                                if (string.IsNullOrWhiteSpace(line)) continue;
+
+                                if (line.StartsWith("data: "))
+                                {
+                                    var data = line.Substring("data: ".Length).Trim();
+                                    if (data == "[DONE]") break;
+
+                                    try
+                                    {
+                                        using var doc = JsonDocument.Parse(data);
+                                        var root = doc.RootElement;
+
+                                        if (root.TryGetProperty("choices", out var choices) && choices.GetArrayLength() > 0)
+                                        {
+                                            var choice = choices[0];
+                                            if (choice.TryGetProperty("delta", out var delta) && delta.TryGetProperty("content", out var contentProp))
+                                            {
+                                                var content = contentProp.GetString();
+                                                if (!string.IsNullOrEmpty(content))
+                                                {
+                                                    contentBuilder.Append(content);
+                                                    onChunkReceived(content);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    catch
+                                    {
+                                        // Ignore JSON parse errors on invalid/incomplete stream chunks
+                                    }
+                                }
+                            }
+                        }
+
+                        var contentStr = contentBuilder.ToString();
+                        _messages.AddLast(new Message { Role = "assistant", Content = contentStr });
+
+                        return new TranslateResult { Translated = contentStr, Detected = LanguageDetector.Detect(text) };
+                    }
+                    catch (Exception ex)
+                    {
+                        if (_messages.Last != null && _messages.Last.Value.Role == "user")
+                            _messages.RemoveLast();
+
+                        return new TranslateResult { Translated = $"Lỗi LLM: {ex.Message}", Detected = "error" };
+                    }
+                }
+                else
+                {
+                    var jsonContent = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
+                    try
+                    {
+                        var endpointUrl = string.IsNullOrWhiteSpace(SnapTranslate.Models.AppSettings.Current.LocalLlmUrl)
+                            ? "http://localhost:1234/v1/chat/completions"
+                            : SnapTranslate.Models.AppSettings.Current.LocalLlmUrl;
+                        using var response = await _httpClient.PostAsync(endpointUrl, jsonContent).ConfigureAwait(false);
+                        response.EnsureSuccessStatusCode();
+
+                        var responseString = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+                        
+                        using var doc = JsonDocument.Parse(responseString);
+                        var root = doc.RootElement;
+                        
+                        var contentStr = root.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString() ?? "";
+                        
+                        // Add assistant response to context
+                        _messages.AddLast(new Message { Role = "assistant", Content = contentStr });
+
+                        return new TranslateResult { Translated = contentStr, Detected = LanguageDetector.Detect(text) };
+                    }
+                    catch (Exception ex)
+                    {
+                        // Remove the user message if failed to translate
+                        if (_messages.Last != null && _messages.Last.Value.Role == "user")
+                            _messages.RemoveLast();
+
+                        return new TranslateResult { Translated = $"Lỗi LLM: {ex.Message}", Detected = "error" };
+                    }
+                }
+            });
         }
     }
 }
